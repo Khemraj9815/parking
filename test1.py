@@ -23,18 +23,18 @@ parking_number = " "
 
 def draw(event, x, y, flags, param):
     global points, drawing
-    drawing = True
     if event == cv2.EVENT_LBUTTONDOWN:
-        points = [(x, y)]
-    elif event == cv2.EVENT_MOUSEMOVE:
-        if drawing:
+        if len(points) < 4:  # Only allow 4 points to be stored
             points.append((x, y))
-    elif event == cv2.EVENT_LBUTTONUP:
-        drawing = False
-        parking_number = input("Enter the parking number: ")
-        if parking_number:
-            area.append(parking_number)
-            polylines.append(np.array(points, np.int32))
+        if len(points) == 4:  # Once 4 points are captured, create the polyline
+            drawing = False
+            parking_number = input("Enter the parking number: ")
+            if parking_number:
+                area.append(parking_number)
+                # Create a closed polyline with exactly 4 points
+                polyline = np.array(points, np.int32).reshape((-1, 1, 2))
+                polylines.append(polyline)
+                points = []  # Clear points for the next polyline
     elif event == cv2.EVENT_RBUTTONDOWN:
         if polylines:
             polylines.pop()
