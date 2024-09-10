@@ -125,6 +125,53 @@ while True:
             print("Database error:", e)
             conn.rollback()
 
+        # this is for parking details
+        sql = """
+        INSERT INTO parking_details (parking_Detail_id, parking_name, parking_space, timestamp, vehicle_in_parking, free_space, total_vehicle_parked)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """
+        try:
+            cursor.execute(sql, (1, parking_name, parking_space, timestamp, parked_cars, free_space, total_cars))
+            conn.commit()
+        except Exception as e:
+            print("Database error:", e)
+            conn.rollback()
+
+        # this is for dzongkhag
+            sql = """ 
+        INSERT INTO Dzongkhag (Dzongkhag_id, Dzongkhag_name)
+        VALUES (%s, %s)
+        """
+        try:
+            cursor.execute(sql, (Dzongkhag_id, Dzongkhag_name))
+            conn.commit()
+        except Exception as e:
+            print("Database error:", e)
+            conn.rollback()
+
+        # this is for parking Area
+            sql = """
+        INSERT INTO Parking_Area (parking_Area_id, parking_location, Dzongkhag_id)
+        VALUES (%s, %s, %s)
+        """
+        try:
+            cursor.execute(sql, (parking_Area_id, parking_location, Dzongkhag_id))
+            conn.commit()
+        except Exception as e:
+            print("Database error:", e)
+            conn.rollback()
+
+            sql = """
+        INSERT INTO Parking_slot (slot_id, parking_Detail_id, is_occupied, arrival_time, depature_time, total_time_parked)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """
+        try:
+            cursor.execute(sql, (slot_id, parking_Detail_id, is_occupied, arrival_time, depature_time, total_time_parked))
+            conn.commit()
+        except Exception as e:
+            print("Database error:", e)
+            conn.rollback()
+
     # Show the frame with annotations
     cv2.imshow('Parking Space Detection', frame)
 
