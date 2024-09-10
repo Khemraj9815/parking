@@ -7,12 +7,22 @@ import cvzone
 import psycopg2
 from datetime import datetime
 
-
 # Load parking area data and class list
 with open("parking_data", "rb") as f:
     data = pickle.load(f)
-    polylines = data["polylines"]
+    polylines = data.get("polylines", [])
+    slot = data.get("slot", [])  # Use .get to ensure slot is initialized
+    dzongkhag_id = data.get("dzongkhag_id")  # Use .get to avoid KeyError
+    dzongkhag_name = data.get("dzongkhag_name")  # Use .get to avoid KeyError
 
+# If dzongkhag_id or dzongkhag_name is missing, ask the user for input
+if dzongkhag_id is None:
+    dzongkhag_id = input("Enter the dzongkhag id: ")
+
+if dzongkhag_name is None:
+    dzongkhag_name = input("Enter the dzongkhag name: ")
+
+# Load class list for YOLO detection
 with open("coco.txt", "r") as my_file:
     class_list = my_file.read().split("\n")
 
@@ -37,13 +47,12 @@ cap = cv2.VideoCapture("rtsp://DVR:admin_123@192.168.0.98:554/Streaming/Channel/
 
 # Initialize variables
 total_cars = 0
-counted_polylines = set()  # To track polylines that have turned red
+counted_polylines = set()  # Track counted polylines
 
 # Track previous values to detect changes
 prev_parked_cars = 0
 prev_free_space = len(polylines)
 prev_total_cars = 0
-
 
 def car_enters():
     global total_cars
@@ -76,7 +85,7 @@ while True:
     # Analyze parking spots
     parked_cars = 0
     for i, polyline in enumerate(polylines):
-        is_car_in_spot = False  # To track if a car is inside the polyline
+        is_car_in_spot = False
         for centroid in car_centroids:
             if cv2.pointPolygonTest(polyline, centroid, False) >= 0:
                 parked_cars += 1
@@ -88,13 +97,13 @@ while True:
             cv2.polylines(frame, [polyline], True, (0, 0, 255), 2)
             # Increment total_cars only if this polyline hasn't been counted before
             if i not in counted_polylines:
-                counted_polylines.add(i)  # Mark this polyline as counted
+                counted_polylines.add(i)
                 car_enters()
         else:
-            # If no car is in the polyline, keep it green and remove it from counted_polylines
+            # If no car is in the polyline, keep it green
             cv2.polylines(frame, [polyline], True, (0, 255, 0), 2)
             if i in counted_polylines:
-                counted_polylines.remove(i)  # Remove polyline from counted set
+                counted_polylines.remove(i)
 
     # Calculate free spaces
     free_space = len(polylines) - parked_cars
@@ -102,74 +111,24 @@ while True:
     # Display car count and free space
     cvzone.putTextRect(frame, f'Cars in Parking: {parked_cars}', (700, 25), scale=2, thickness=2, colorR=(99, 11, 142))
     cvzone.putTextRect(frame, f'Free Spaces: {free_space}', (700, 65), scale=2, thickness=2, colorR=(99, 11, 142))
-    cvzone.putTextRect(frame, f'Total vehicle parked: {total_cars}', (30, 30), scale=2, thickness=2, colorR=(99, 142, 11))
+    cvzone.putTextRect(frame, f'{parking_name}', (16, 34), scale=2, thickness=2, colorR=(99, 11, 142))
 
-    # check if values have changed before updating the database
+    # Check if values have changed before updating the database
     if prev_parked_cars != parked_cars or prev_free_space != free_space or prev_total_cars != total_cars:
-        # upadate the previous values
         prev_parked_cars = parked_cars
         prev_free_space = free_space
         prev_total_cars = total_cars
 
-        # Insert data into the database
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        sql = """
-        INSERT INTO parking_details (parking_id, parking_name, parking_space, timestamp, vehicle_in_parking, free_space, total_vehicle_parked)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """
+        # Insert or update Dzongkhag data in the database
         try:
-            cursor.execute(sql, (1, parking_name, parking_space, timestamp, parked_cars, free_space, total_cars))
+            cursor.execute("""
+                INSERT INTO dzongkhag (dzongkhag_id, dzongkhag_name)
+                VALUES (%s, %s)
+                ON CONFLICT (dzongkhag_id) DO NOTHING;
+            """, (dzongkhag_id, dzongkhag_name))
             conn.commit()
         except Exception as e:
-            print("Database error:", e)
-            conn.rollback()
-
-        # this is for parking details
-        sql = """
-        INSERT INTO parking_details (parking_Detail_id, parking_name, parking_space, timestamp, vehicle_in_parking, free_space, total_vehicle_parked)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """
-        try:
-            cursor.execute(sql, (1, parking_name, parking_space, timestamp, parked_cars, free_space, total_cars))
-            conn.commit()
-        except Exception as e:
-            print("Database error:", e)
-            conn.rollback()
-
-        # this is for dzongkhag
-            sql = """ 
-        INSERT INTO Dzongkhag (Dzongkhag_id, Dzongkhag_name)
-        VALUES (%s, %s)
-        """
-        try:
-            cursor.execute(sql, (Dzongkhag_id, Dzongkhag_name))
-            conn.commit()
-        except Exception as e:
-            print("Database error:", e)
-            conn.rollback()
-
-        # this is for parking Area
-            sql = """
-        INSERT INTO Parking_Area (parking_Area_id, parking_location, Dzongkhag_id)
-        VALUES (%s, %s, %s)
-        """
-        try:
-            cursor.execute(sql, (parking_Area_id, parking_location, Dzongkhag_id))
-            conn.commit()
-        except Exception as e:
-            print("Database error:", e)
-            conn.rollback()
-
-            sql = """
-        INSERT INTO Parking_slot (slot_id, parking_Detail_id, is_occupied, arrival_time, depature_time, total_time_parked)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        """
-        try:
-            cursor.execute(sql, (slot_id, parking_Detail_id, is_occupied, arrival_time, depature_time, total_time_parked))
-            conn.commit()
-        except Exception as e:
-            print("Database error:", e)
+            print(f"Database error: {e}")
             conn.rollback()
 
     # Show the frame with annotations
