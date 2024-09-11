@@ -10,18 +10,12 @@ drawing = False
 polylines = []
 slot = []
 
-# Get Dzongkhag information from user input
-dzongkhag_id = input("Enter the dzongkhag id: ")
-dzongkhag_name = input("Enter the dzongkhag name: ")
-
 # Attempt to load existing parking data
 try:
     with open("parking_data", "rb") as f:
         data = pickle.load(f)
         polylines = data.get("polylines", [])  # Use .get() to provide default empty list
-        slot = data.get("slot", [])  # Ensure slot is initialized
-        dzongkhag_id = data.get("dzongkhag_id", dzongkhag_id)
-        dzongkhag_name = data.get("dzongkhag_name", dzongkhag_name)
+        slot = data.get("slot", [])  # Ensure slot is initialize
 except FileNotFoundError:
     print("No existing parking data found, starting fresh.")
 except Exception as e:
@@ -75,9 +69,7 @@ while True:
         with open("parking_data", "wb") as f:
             data = {
                 "polylines": polylines,
-                "slot": slot,
-                "dzongkhag_id": dzongkhag_id,
-                "dzongkhag_name": dzongkhag_name
+                "slot": slot
             }
             pickle.dump(data, f)
         print("Parking data saved.")

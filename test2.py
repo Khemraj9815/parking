@@ -12,15 +12,6 @@ with open("parking_data", "rb") as f:
     data = pickle.load(f)
     polylines = data.get("polylines", [])
     slot = data.get("slot", [])  # Use .get to ensure slot is initialized
-    dzongkhag_id = data.get("dzongkhag_id")  # Use .get to avoid KeyError
-    dzongkhag_name = data.get("dzongkhag_name")  # Use .get to avoid KeyError
-
-# If dzongkhag_id or dzongkhag_name is missing, ask the user for input
-if dzongkhag_id is None:
-    dzongkhag_id = input("Enter the dzongkhag id: ")
-
-if dzongkhag_name is None:
-    dzongkhag_name = input("Enter the dzongkhag name: ")
 
 # Load class list for YOLO detection
 with open("coco.txt", "r") as my_file:
@@ -39,24 +30,15 @@ conn = psycopg2.connect(
 )
 cursor = conn.cursor()
 
-parking_name = input("Enter the parking name: ")
-parking_space = input("Enter the parking space: ")
-
 # Initialize video capture
 cap = cv2.VideoCapture("rtsp://DVR:admin_123@192.168.0.98:554/Streaming/Channel/1")
 
 # Initialize variables
-total_cars = 0
 counted_polylines = set()  # Track counted polylines
 
 # Track previous values to detect changes
 prev_parked_cars = 0
 prev_free_space = len(polylines)
-prev_total_cars = 0
-
-def car_enters():
-    global total_cars
-    total_cars += 1
 
 while True:
     ret, frame = cap.read()
@@ -95,10 +77,8 @@ while True:
         if is_car_in_spot:
             # If a car is in the polyline, turn it red
             cv2.polylines(frame, [polyline], True, (0, 0, 255), 2)
-            # Increment total_cars only if this polyline hasn't been counted before
-            if i not in counted_polylines:
-                counted_polylines.add(i)
-                car_enters()
+            # Add to counted_polylines if not counted already
+            counted_polylines.add(i)
         else:
             # If no car is in the polyline, keep it green
             cv2.polylines(frame, [polyline], True, (0, 255, 0), 2)
@@ -111,21 +91,19 @@ while True:
     # Display car count and free space
     cvzone.putTextRect(frame, f'Cars in Parking: {parked_cars}', (700, 25), scale=2, thickness=2, colorR=(99, 11, 142))
     cvzone.putTextRect(frame, f'Free Spaces: {free_space}', (700, 65), scale=2, thickness=2, colorR=(99, 11, 142))
-    cvzone.putTextRect(frame, f'{parking_name}', (16, 34), scale=2, thickness=2, colorR=(99, 11, 142))
 
     # Check if values have changed before updating the database
-    if prev_parked_cars != parked_cars or prev_free_space != free_space or prev_total_cars != total_cars:
+    if prev_parked_cars != parked_cars or prev_free_space != free_space:
         prev_parked_cars = parked_cars
         prev_free_space = free_space
-        prev_total_cars = total_cars
 
         # Insert or update Dzongkhag data in the database
         try:
             cursor.execute("""
-                INSERT INTO dzongkhag (dzongkhag_id, dzongkhag_name)
-                VALUES (%s, %s)
-                ON CONFLICT (dzongkhag_id) DO NOTHING;
-            """, (dzongkhag_id, dzongkhag_name))
+                INSERT INTO parking_details (parkingDetail_id, total_parking_slot, parkingArea_id, vehicleIn_parking, free_parking_slot, total_vehicle_parked)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (parkingDetail_id) DO NOTHING;
+            """, ())
             conn.commit()
         except Exception as e:
             print(f"Database error: {e}")
