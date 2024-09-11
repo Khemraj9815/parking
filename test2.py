@@ -36,9 +36,18 @@ cap = cv2.VideoCapture("rtsp://DVR:admin_123@192.168.0.98:554/Streaming/Channel/
 # Initialize variables
 counted_polylines = set()  # Track counted polylines
 
-# Track previous values to detect changes
-prev_parked_cars = 0
-prev_free_space = len(polylines)
+# Fetch the parkingArea_id for a specific parking area
+parking_location = "norzin lam"  # You can adjust this as needed
+cursor.execute("SELECT parkingArea_id FROM parking_area WHERE parking_location = %s", (parking_location,))
+parkingArea_id_result = cursor.fetchone()
+
+if parkingArea_id_result:
+    parkingArea_id = parkingArea_id_result[0]  # Extract the parkingArea_id from the result
+else:
+    print("Parking area not found in the database.")
+    parkingArea_id = None
+
+
 
 while True:
     ret, frame = cap.read()
@@ -93,21 +102,19 @@ while True:
     cvzone.putTextRect(frame, f'Free Spaces: {free_space}', (700, 65), scale=2, thickness=2, colorR=(99, 11, 142))
 
     # Check if values have changed before updating the database
-    if prev_parked_cars != parked_cars or prev_free_space != free_space:
-        prev_parked_cars = parked_cars
-        prev_free_space = free_space
+    
 
-        # Insert or update Dzongkhag data in the database
-        try:
-            cursor.execute("""
-                INSERT INTO parking_details (parkingDetail_id, total_parking_slot, parkingArea_id, vehicleIn_parking, free_parking_slot, total_vehicle_parked)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (parkingDetail_id) DO NOTHING;
-            """, ())
-            conn.commit()
-        except Exception as e:
-            print(f"Database error: {e}")
-            conn.rollback()
+    # Insert database
+    try:
+        cursor.execute("""
+            INSERT INTO parking_detail (parkingarea_id, total_parking_slot, vehiclein_parking, free_parking_slot)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (parkingDetail_id) DO NOTHING;
+        """, (parkingArea_id, len(polylines), parked_cars, free_space))
+        conn.commit()
+    except Exception as e:
+        print(f"Database error: {e}")
+        conn.rollback()
 
     # Show the frame with annotations
     cv2.imshow('Parking Space Detection', frame)
