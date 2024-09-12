@@ -37,7 +37,7 @@ cap = cv2.VideoCapture("rtsp://DVR:admin_123@192.168.0.98:554/Streaming/Channel/
 counted_polylines = set()  # Track counted polylines
 arrival_times = {}  # Store the arrival time of vehicles
 departure_times = {}  # Store the departure time of vehicles
-total_time_parked = {}  # Store the total time parked for each slot (in minutes)
+total_time_parked = {}  # Store the total time parked for each slot (in timedelta)
 
 # Fetch the parkingArea_id for a specific parking area
 parking_location = "norzin lam"  # You can adjust this as needed
@@ -114,9 +114,12 @@ while True:
         cursor.execute("""
             INSERT INTO parking_detail (parkingarea_id, total_parking_slot, vehiclein_parking, free_parking_slot)
             VALUES (%s, %s, %s, %s)
-            ON CONFLICT (parkingarea_id) DO UPDATE
-            SET vehiclein_parking = EXCLUDED.vehiclein_parking, free_parking_slot = EXCLUDED.free_parking_slot;
+            ON CONFLICT (parkingdetail_id) DO UPDATE
+            SET vehiclein_parking = EXCLUDED.vehiclein_parking, free_parking_slot = EXCLUDED.free_parking_slot
+            RETURNING parkingdetail_id;
         """, (parkingArea_id, len(polylines), parked_cars, free_space))
+
+        parkingDetail_id = cursor.fetchone()[0]
 
         # Insert into parking slots
         for j, polyline in enumerate(polylines):
@@ -129,13 +132,13 @@ while True:
 
                 cursor.execute("""
                     INSERT INTO parking_slots (slot_id, parkingDetail_id, is_occupied, arrival_time, departureTime, total_time_parked)
-                    VALUES (%s, (SELECT parkingDetail_id FROM parking_detail WHERE parkingarea_id = %s LIMIT 1), %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s)
                     ON CONFLICT (slot_id) DO UPDATE
                     SET is_occupied = EXCLUDED.is_occupied, 
                         arrival_time = COALESCE(EXCLUDED.arrival_time, parking_slots.arrival_time),
                         departureTime = COALESCE(EXCLUDED.departureTime, parking_slots.departureTime),
                         total_time_parked = COALESCE(EXCLUDED.total_time_parked, parking_slots.total_time_parked);
-                """, (slot_id, parkingArea_id, is_occupied, arrival_time, departure_time, total_parked_time))
+                """, (slot_id, parkingDetail_id, is_occupied, arrival_time, departure_time, total_parked_time))
         
         conn.commit()
     except Exception as e:
