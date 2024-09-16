@@ -37,10 +37,9 @@ cap = cv2.VideoCapture("rtsp://DVR:admin_123@192.168.0.98:554/Streaming/Channel/
 counted_polylines = set()  # Track counted polylines
 arrival_times = {}  # Store the arrival time of vehicles
 departure_times = {}  # Store the departure time of vehicles
-total_time_parked = {}  # Store the total time parked for each slot (in timedelta)
 
 # Fetch the parkingArea_id for a specific parking area
-parking_location = "norzin lam"  # You can adjust this as needed
+parking_location = "norzin lam"
 cursor.execute("SELECT parkingArea_id FROM parking_area WHERE parking_location = %s", (parking_location,))
 parkingArea_id_result = cursor.fetchone()
 
@@ -50,6 +49,7 @@ else:
     print("Parking area not found in the database.")
     parkingArea_id = None
 
+# Main loop
 while True:
     ret, frame = cap.read()
     if not ret:
@@ -73,7 +73,7 @@ while True:
         if class_name in ['car', 'bus', 'motorcycle']:
             centroid = ((x1 + x2) // 2, (y1 + y2) // 2)
             car_centroids.append(centroid)
-    
+
     # Analyze parking spots
     parked_cars = 0
     for i, polyline in enumerate(polylines):
@@ -89,14 +89,6 @@ while True:
                 counted_polylines.add(i)
                 break  # No need to check further centroids for this polyline
 
-        if not is_car_in_spot:
-            if i in counted_polylines:  # Vehicle was there previously and now has left
-                departure_times[i] = datetime.now()
-                # Calculate total parked time as interval
-                total_time_parked[i] = departure_times[i] - arrival_times[i]
-                print(f"Car left slot {slot_ids[i]} at {departure_times[i]} after parking for {total_time_parked[i]}")
-                counted_polylines.remove(i)
-
         # Draw polyline and manage color based on occupancy
         color = (0, 0, 255) if is_car_in_spot else (0, 255, 0)
         cv2.polylines(frame, [polyline], True, color, 2)
@@ -105,42 +97,32 @@ while True:
     free_space = len(polylines) - parked_cars
 
     # Display car count and free space
-    cvzone.putTextRect(frame, f'Cars in Parking: {parked_cars}', (700, 25), scale=2, thickness=2, colorR=(99, 11, 142))
-    cvzone.putTextRect(frame, f'Free Spaces: {free_space}', (700, 65), scale=2, thickness=2, colorR=(99, 11, 142))
+    cvzone.putTextRect(frame, f'Cars in Parking: {parked_cars}', (1362, 84), scale=2, thickness=2, colorR=(99, 11, 142))
+    cvzone.putTextRect(frame, f'Free Spaces: {free_space}', (1362, 117), scale=2, thickness=2, colorR=(99, 11, 142))
 
-    # Insert into database with slot_id
+    # Insert into the database
     try:
         # Insert into parking detail
         cursor.execute("""
-            INSERT INTO parking_detail (parkingarea_id, total_parking_slot, vehiclein_parking, free_parking_slot)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (parkingdetail_id) DO UPDATE
-            SET vehiclein_parking = EXCLUDED.vehiclein_parking, free_parking_slot = EXCLUDED.free_parking_slot
-            RETURNING parkingdetail_id;
-        """, (parkingArea_id, len(polylines), parked_cars, free_space))
-
-        parkingDetail_id = cursor.fetchone()[0]
+            INSERT INTO parking_detail (parkingArea_id, total_parking_slot, vehicleIn_parking, free_parking_slot, currentTime)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (parkingArea_id, len(polylines), parked_cars, free_space, datetime.now()))
+        conn.commit()
 
         # Insert into parking slots
         for j, polyline in enumerate(polylines):
             if j < len(slot_ids):  # Ensure that the slot_id index exists
                 slot_id = slot_ids[j]
+                parkingDetail_id = 2
                 is_occupied = j in counted_polylines
                 arrival_time = arrival_times.get(j, None)
                 departure_time = departure_times.get(j, None)
-                total_parked_time = total_time_parked.get(j, timedelta(0))  # Use timedelta(0) if no time is available
 
                 cursor.execute("""
-                    INSERT INTO parking_slots (slot_id, parkingDetail_id, is_occupied, arrival_time, departureTime, total_time_parked)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (slot_id) DO UPDATE
-                    SET is_occupied = EXCLUDED.is_occupied, 
-                        arrival_time = COALESCE(EXCLUDED.arrival_time, parking_slots.arrival_time),
-                        departureTime = COALESCE(EXCLUDED.departureTime, parking_slots.departureTime),
-                        total_time_parked = COALESCE(EXCLUDED.total_time_parked, parking_slots.total_time_parked);
-                """, (slot_id, parkingDetail_id, is_occupied, arrival_time, departure_time, total_parked_time))
-        
-        conn.commit()
+                    INSERT INTO parking_slots (slot_id, parkingdetail_id, is_occupied, arrival_time, departure_time)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (slot_id, parkingDetail_id, is_occupied, arrival_time, departure_time))
+                conn.commit()
     except Exception as e:
         print(f"Database error: {e}")
         conn.rollback()
