@@ -39,7 +39,7 @@ arrival_times = {}  # Store the arrival time of vehicles
 departure_times = {}  # Store the departure time of vehicles
 
 # Fetch the parkingArea_id for a specific parking area
-parking_location = "norzin lam"
+parking_location = "karmas dhaba"
 cursor.execute("SELECT parkingArea_id FROM parking_area WHERE parking_location = %s", (parking_location,))
 parkingArea_id_result = cursor.fetchone()
 
@@ -100,20 +100,21 @@ while True:
     cvzone.putTextRect(frame, f'Cars in Parking: {parked_cars}', (1362, 84), scale=2, thickness=2, colorR=(99, 11, 142))
     cvzone.putTextRect(frame, f'Free Spaces: {free_space}', (1362, 117), scale=2, thickness=2, colorR=(99, 11, 142))
 
-    # Insert into the database
+    # Insert into parking detail and return the parkingdetail_id
     try:
-        # Insert into parking detail
         cursor.execute("""
-            INSERT INTO parking_detail (parkingArea_id, total_parking_slot, vehicleIn_parking, free_parking_slot, currentTime)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO parking_detail (parkingArea_id, total_parking_slot, vehicleIn_parking, free_parking_slot, "current_time")
+            VALUES (%s, %s, %s, %s, %s) RETURNING parkingdetail_id
         """, (parkingArea_id, len(polylines), parked_cars, free_space, datetime.now()))
+        
+        # Get the parkingdetail_id of the newly inserted row
+        parkingDetail_id = cursor.fetchone()[0]
         conn.commit()
 
         # Insert into parking slots
         for j, polyline in enumerate(polylines):
             if j < len(slot_ids):  # Ensure that the slot_id index exists
                 slot_id = slot_ids[j]
-                parkingDetail_id = 2
                 is_occupied = j in counted_polylines
                 arrival_time = arrival_times.get(j, None)
                 departure_time = departure_times.get(j, None)
@@ -126,6 +127,7 @@ while True:
     except Exception as e:
         print(f"Database error: {e}")
         conn.rollback()
+
 
     # Show the frame with annotations
     cv2.imshow('Parking Space Detection', frame)
