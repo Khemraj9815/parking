@@ -97,8 +97,8 @@ while True:
     free_space = len(polylines) - parked_cars
 
     # Display car count and free space
-    cvzone.putTextRect(frame, f'Cars in Parking: {parked_cars}', (1362, 84), scale=2, thickness=2, colorR=(99, 11, 142))
-    cvzone.putTextRect(frame, f'Free Spaces: {free_space}', (1362, 117), scale=2, thickness=2, colorR=(99, 11, 142))
+    cvzone.putTextRect(frame, f'Cars in Parking: {parked_cars}', (1362, 100), scale=2, thickness=2, colorR=(99, 11, 142))
+    cvzone.putTextRect(frame, f'Free Spaces: {free_space}', (1362, 134), scale=2, thickness=2, colorR=(99, 11, 142))
 
     # Insert into parking detail and return the parkingdetail_id
     try:
@@ -119,11 +119,19 @@ while True:
                 arrival_time = arrival_times.get(j, None)
                 departure_time = departure_times.get(j, None)
 
-                cursor.execute("""
-                    INSERT INTO parking_slots (slot_id, parkingdetail_id, is_occupied, arrival_time, departure_time)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (slot_id, parkingDetail_id, is_occupied, arrival_time, departure_time))
-                conn.commit()
+                if arrival_time is not None:
+                    cursor.execute("""
+                        SELECT COUNT(*) FROM parking_slots 
+                        WHERE slot_id = %s AND arrival_time = %s
+                    """, (slot_id, arrival_time))
+                    result = cursor.fetchone()
+
+                    if result[0] == 0:
+                        cursor.execute("""
+                            INSERT INTO parking_slots (slot_id, parkingdetail_id, is_occupied, arrival_time, departure_time)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (slot_id, parkingDetail_id, is_occupied, arrival_time, departure_time))
+                        conn.commit()
     except Exception as e:
         print(f"Database error: {e}")
         conn.rollback()
